@@ -77,6 +77,11 @@ export interface VerifierOptions {
   fetch?: FetchLike;
   /** Clock replacement for tests. Returns milliseconds since epoch. Default `Date.now`. */
   now?: () => number;
+  /**
+   * Accept demo-card results (`validations.is_test: true` or `TEST_` codes) in `verifyAndConsume` /
+   * `consumeAndCheck`. Demo cards work only for test partners. Default `false`: turn on for test setups only.
+   */
+  allowTestCards?: boolean;
 }
 
 /** The `encrypted_response` object of a pattern B (callback) webhook body. */

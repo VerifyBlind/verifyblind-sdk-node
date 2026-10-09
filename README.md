@@ -50,7 +50,6 @@ const verifier = createVerifier();
 app.post('/api/verifyblind/verify', express.json(), async (req, res) => {
   const r = await verifier.verifyAndConsume(req.body?.token, (nonce) => redis.getdel(`vb:nonce:${nonce}`));
   if (!r.ok) return res.status(r.error.code === 'KEY_FETCH_FAILED' ? 503 : 401).json({ error: r.error.code });
-  if (r.isTest && process.env.NODE_ENV === 'production') return res.status(403).json({ error: 'TEST_RESULT' });
   await saveVerification(req.user.id, r.validations); // user_id / nsbd_id / doc_id → veritabanına, LOGA DEĞİL
   res.json({ ok: true, age: r.validations.age });
 });
@@ -103,7 +102,7 @@ Sonucu **tarayıcının söylediğine göre değil, sizin sakladığınıza gör
 | Siz sordunuz | İmzalı sonuçta olması gereken |
 |---|---|
 | `age: '18+'` | `validations.age` boolean **ve** `validations.age_condition === '18+'` (yoksa ya da farklıysa red) |
-| `age` sormadınız | `validations.age` **olmamalı** |
+| `age` sormadınız | `validations.age` ve `validations.age_condition` **olmamalı** |
 | `user_id: true` | `validations.user_id` dolu olmalı |
 
 Neden: tarayıcı isteği DevTools'ta değiştirilebilir. Ziyaretçi `"18+"`'yı `"1+"` yapar ve gerçekten imzalı bir
@@ -117,14 +116,15 @@ Neden: tarayıcı isteği DevTools'ta değiştirilebilir. Ziyaretçi `"18+"`'yı
 `console.log`, istek logları, hata izleme (Sentry vb.) ya da analitiğe **yazmayın**. Bu kütüphane hiçbir şey
 loglamaz ve hata mesajlarına bu kodları koymaz. `r` nesnesinin tamamını loglamayın.
 
-Demo kartı sonuçları `validations.is_test: true` taşır (`r.isTest`) ve kodları `TEST_` ile başlar;
-üretim kararlarından ayrı tutun.
+Demo kartı sonuçları `validations.is_test: true` taşır (`r.isTest`) ve kodları `TEST_` ile başlar.
+`verifyAndConsume` bunları varsayılan olarak `TEST_CARD` hatasıyla reddeder; yalnız test ortamında
+`createVerifier({ allowTestCards: true })` verin.
 
 ## API
 
 | Fonksiyon | Açıklama |
 |---|---|
-| `createVerifier(options?)` | Verifier oluşturur. Seçenekler: `apiBaseUrl` (varsayılan `https://api.verifyblind.com`), `keyCacheMs` (60 000), `webhookKeyCacheMs` (3 600 000), `webhookToleranceSec` (300), `fetch`, `now` |
+| `createVerifier(options?)` | Verifier oluşturur. Seçenekler: `apiBaseUrl` (varsayılan `https://api.verifyblind.com`), `keyCacheMs` (60 000), `webhookKeyCacheMs` (3 600 000), `webhookToleranceSec` (300), `allowTestCards` (`false`), `fetch`, `now` |
 | `verifier.verifyAndConsume(token, consumeNonce)` | İmza → nonce tüketme → sorulan koşul. `{ ok: true, nonce, validations, asked, isTest, payload }` ya da `{ ok: false, error }`. Doğrulama hatasında fırlatmaz |
 | `verifier.verifyToken(token)` | Yalnız imza. `VerifiedResult` döner ya da `VerifyBlindError` fırlatır. Nonce'u siz tüketmelisiniz |
 | `verifier.verifySigned({ payload, signature })` | `verifyToken`'ın çözülmüş hâli |
@@ -148,6 +148,7 @@ Demo kartı sonuçları `validations.is_test: true` taşır (`r.isTest`) ve kodl
 | `ASKED_MISMATCH` | Sonuç sizin sorduğunuzla eşleşmiyor | 401 |
 | `BAD_WEBHOOK_TIMESTAMP` / `BAD_WEBHOOK_SIGNATURE` | Webhook reddedildi | 401 |
 | `DECRYPT_FAILED` | `encrypted_response` çözülemedi | 400 |
+| `TEST_CARD` | Demo kart sonucu ve `allowTestCards` kapalı | 403 |
 
 ## Revoke webhook'u (Express)
 
@@ -247,7 +248,6 @@ const verifier = createVerifier();
 app.post('/api/verifyblind/verify', express.json(), async (req, res) => {
   const r = await verifier.verifyAndConsume(req.body?.token, (nonce) => redis.getdel(`vb:nonce:${nonce}`));
   if (!r.ok) return res.status(r.error.code === 'KEY_FETCH_FAILED' ? 503 : 401).json({ error: r.error.code });
-  if (r.isTest && process.env.NODE_ENV === 'production') return res.status(403).json({ error: 'TEST_RESULT' });
   await saveVerification(req.user.id, r.validations); // user_id / nsbd_id / doc_id → database, NOT logs
   res.json({ ok: true, age: r.validations.age });
 });
@@ -300,7 +300,7 @@ enforce:
 | You asked | The signed result must have |
 |---|---|
 | `age: '18+'` | `validations.age` boolean **and** `validations.age_condition === '18+'` (missing or different → reject) |
-| no `age` | **no** `validations.age` |
+| no `age` | **no** `validations.age` and no `validations.age_condition` |
 | `user_id: true` | a non-empty `validations.user_id` |
 
 Why: the browser request can be edited in DevTools. A visitor changes `"18+"` to `"1+"` and receives a genuinely
@@ -315,14 +315,15 @@ make the decision yourself.
 write them to `console.log`, request logs, error tracking (Sentry etc.) or analytics. This library logs nothing
 and keeps them out of error messages. Do not log the whole `r` object.
 
-Demo-card results carry `validations.is_test: true` (`r.isTest`) and codes prefixed `TEST_`; keep them out of
-production decisions.
+Demo-card results carry `validations.is_test: true` (`r.isTest`) and codes prefixed `TEST_`.
+`verifyAndConsume` rejects them by default with `TEST_CARD`; pass `createVerifier({ allowTestCards: true })` on
+test setups only.
 
 ### API
 
 | Function | Description |
 |---|---|
-| `createVerifier(options?)` | Creates a verifier. Options: `apiBaseUrl` (default `https://api.verifyblind.com`), `keyCacheMs` (60 000), `webhookKeyCacheMs` (3 600 000), `webhookToleranceSec` (300), `fetch`, `now` |
+| `createVerifier(options?)` | Creates a verifier. Options: `apiBaseUrl` (default `https://api.verifyblind.com`), `keyCacheMs` (60 000), `webhookKeyCacheMs` (3 600 000), `webhookToleranceSec` (300), `allowTestCards` (`false`), `fetch`, `now` |
 | `verifier.verifyAndConsume(token, consumeNonce)` | Signature → nonce consume → asked check. `{ ok: true, nonce, validations, asked, isTest, payload }` or `{ ok: false, error }`. Does not throw for verification failures |
 | `verifier.verifyToken(token)` | Signature only. Returns `VerifiedResult` or throws `VerifyBlindError`. You must consume the nonce |
 | `verifier.verifySigned({ payload, signature })` | `verifyToken` for an already-decoded token |
@@ -346,6 +347,7 @@ production decisions.
 | `ASKED_MISMATCH` | The result does not match what you asked | 401 |
 | `BAD_WEBHOOK_TIMESTAMP` / `BAD_WEBHOOK_SIGNATURE` | Webhook rejected | 401 |
 | `DECRYPT_FAILED` | `encrypted_response` could not be decrypted | 400 |
+| `TEST_CARD` | Demo-card result while `allowTestCards` is off | 403 |
 
 ### Revoke webhook (Express)
 

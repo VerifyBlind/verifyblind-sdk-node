@@ -8,7 +8,7 @@ import type { Asked, Validations } from './types.js';
  * - Age asked: `validations.age` must be a boolean AND `validations.age_condition` must be present
  *   and equal the asked condition. The enclave always signs the condition it answered, so a visitor
  *   who changed `"18+"` to `"1+"` in the browser is caught here.
- * - Age not asked: no `age` answer is allowed.
+ * - Age not asked: no `age` answer and no `age_condition` are allowed.
  * - `user_id` asked: `validations.user_id` must be present.
  *
  * The returned reason never contains identity codes.
@@ -19,6 +19,7 @@ export function checkAsked(asked: Asked | null | undefined, validations: Validat
 
   if (a.age === undefined || a.age === null) {
     if (v.age !== undefined) return 'age result present although age was not asked';
+    if (v.age_condition !== undefined) return 'age_condition present although age was not asked';
   } else {
     if (typeof v.age !== 'boolean') return 'age result missing';
     if (typeof v.age_condition !== 'string') return `age_condition missing (expected ${a.age})`;

@@ -22,7 +22,9 @@ export type VerifyBlindErrorCode =
   /** Webhook signature header missing or not valid (also after one key refresh). */
   | 'BAD_WEBHOOK_SIGNATURE'
   /** The callback `encrypted_response` could not be decrypted with your private key. */
-  | 'DECRYPT_FAILED';
+  | 'DECRYPT_FAILED'
+  /** A demo-card result while `allowTestCards` is off. */
+  | 'TEST_CARD';
 
 export class VerifyBlindError extends Error {
   readonly code: VerifyBlindErrorCode;

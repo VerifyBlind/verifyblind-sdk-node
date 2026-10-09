@@ -13,7 +13,7 @@ const goodPayload = {
   validations: { age: true, age_condition: '18+', user_id: SECRET_UID, nsbd_id: 'NSBD_SECRET', doc_id: 'DOC_SECRET' },
 };
 
-function setup({ keys = [enclaveA.publicKey], status = 200, now } = {}) {
+function setup({ keys = [enclaveA.publicKey], status = 200, now, allowTestCards } = {}) {
   let i = 0;
   const fetch = fakeFetch({
     [KEY_PATH]: () => {
@@ -22,7 +22,7 @@ function setup({ keys = [enclaveA.publicKey], status = 200, now } = {}) {
       return { status, body: typeof k === 'string' ? k : spkiBase64(k) };
     },
   });
-  const verifier = createVerifier({ fetch, now });
+  const verifier = createVerifier({ fetch, now, allowTestCards });
   return { verifier, fetch };
 }
 
@@ -162,6 +162,7 @@ describe('checkAsked', () => {
     ['age asked, age not boolean', { age: '18+' }, { age: 'true', age_condition: '18+' }, false],
     ['age not asked but age present', { user_id: true }, { age: true, age_condition: '1+', user_id: 'u' }, false],
     ['age not asked, age absent', { user_id: true }, { user_id: 'u' }, true],
+    ['age not asked but age_condition present', { user_id: true }, { age_condition: '18+', user_id: 'u' }, false],
     ['user_id asked but missing', { user_id: true }, {}, false],
     ['user_id asked but empty', { user_id: true }, { user_id: '' }, false],
     ['both asked, both present', { age: '18+', user_id: true }, { age: true, age_condition: '18+', user_id: 'u' }, true],
@@ -177,6 +178,31 @@ describe('checkAsked', () => {
       assert.equal(createVerifier({ fetch: async () => { throw new Error('unused'); } }).checkAsked(asked, validations), r);
     });
   }
+});
+
+describe('demo cards', () => {
+  const demo = { nonce: 'n-1', validations: { age: true, age_condition: '18+', user_id: 'TEST_abc', is_test: true } };
+  const prefixOnly = { nonce: 'n-1', validations: { age: true, age_condition: '18+', nsbd_id: 'TEST_def' } };
+
+  test('rejected by default with TEST_CARD (is_test flag)', async () => {
+    const { verifier } = setup();
+    const r = await verifier.verifyAndConsume(makeToken(enclaveA.privateKey, demo), memoryStore({ 'n-1': { age: '18+', user_id: true } }));
+    assert.equal(r.ok, false);
+    assert.equal(r.error.code, 'TEST_CARD');
+  });
+
+  test('rejected by default with TEST_CARD (TEST_ prefix only)', async () => {
+    const { verifier } = setup();
+    const r = await verifier.verifyAndConsume(makeToken(enclaveA.privateKey, prefixOnly), memoryStore({ 'n-1': { age: '18+' } }));
+    assert.equal(r.error?.code, 'TEST_CARD');
+  });
+
+  test('accepted with allowTestCards', async () => {
+    const { verifier } = setup({ allowTestCards: true });
+    const r = await verifier.verifyAndConsume(makeToken(enclaveA.privateKey, demo), memoryStore({ 'n-1': { age: '18+', user_id: true } }));
+    assert.equal(r.ok, true);
+    assert.equal(r.isTest, true);
+  });
 });
 
 describe('verifyAndConsume', () => {

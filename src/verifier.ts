@@ -105,6 +105,12 @@ class KeyCache {
   }
 }
 
+/** A demo-card result (test partners only): `is_test: true` or identity codes with the `TEST_` prefix. */
+function isTestResult(v: Validations): boolean {
+  if (v.is_test === true) return true;
+  return [v.user_id, v.nsbd_id, v.doc_id].some((c) => typeof c === 'string' && c.startsWith('TEST_'));
+}
+
 export function createVerifier(options: VerifierOptions = {}): Verifier {
   const baseUrl = (options.apiBaseUrl ?? DEFAULT_API_BASE_URL).replace(/\/+$/, '');
   const now = options.now ?? Date.now;
@@ -176,7 +182,7 @@ export function createVerifier(options: VerifierOptions = {}): Verifier {
     }
     const validations: Validations =
       p.validations && typeof p.validations === 'object' && !Array.isArray(p.validations) ? p.validations : {};
-    return { nonce: p.nonce, validations, payload: p, rawPayload: payload, isTest: validations.is_test === true };
+    return { nonce: p.nonce, validations, payload: p, rawPayload: payload, isTest: isTestResult(validations) };
   }
 
   async function verifyToken(token: string): Promise<VerifiedResult> {
@@ -201,6 +207,9 @@ export function createVerifier(options: VerifierOptions = {}): Verifier {
         ok: false,
         error: new VerifyBlindError('NONCE_NOT_FOUND', 'nonce is unknown, expired or already used'),
       };
+    }
+    if (verified.isTest && options.allowTestCards !== true) {
+      return { ok: false, error: new VerifyBlindError('TEST_CARD', 'demo-card result; set allowTestCards on test setups only') };
     }
     const asked = normalizeAsked(stored);
     if (!asked) {
