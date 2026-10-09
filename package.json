@@ -7,7 +7,7 @@
   "homepage": "https://verifyblind.com/en/developers",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/VerifyBlind/verifyblind-node.git"
+    "url": "git+https://github.com/VerifyBlind/verifyblind-sdk-node.git"
   },
   "bugs": {
     "email": "support@verifyblind.com"
