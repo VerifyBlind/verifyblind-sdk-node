@@ -49,7 +49,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test test/",
+    "test": "npm run build && node --test",
     "prepublishOnly": "npm run typecheck && npm test"
   },
   "devDependencies": {
